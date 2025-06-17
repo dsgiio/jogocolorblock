@@ -1,0 +1,148 @@
+import pygame
+import random
+
+# === CONFIGURAÇÃO GERAL ===
+largura, altura = 800, 600
+linhas, colunas = 5, 6
+largura_bloco, altura_bloco, espaco = 80, 80, 10
+margem_x = (largura - (colunas * (largura_bloco + espaco))) // 2
+margem_y = 80
+cores = {
+    "amarelo": (255, 255, 0), "vermelho": (255, 0, 0), "verde": (0, 255, 0),
+    "azul": (0, 0, 255), "roxo": (128, 0, 128), "laranja": (255, 165, 0),
+    "branco": (255, 255, 255), "preto": (0, 0, 0)
+}
+
+# === EXPRESSÕES MATEMÁTICAS ===
+def gerarOperacao(operador):
+    tentativa = 0
+    while tentativa < 10:
+        if operador == '+':
+            a, b = random.randint(5, 20), random.randint(5, 20)
+            if a == b or a + b <= 10: tentativa += 1; continue
+            return f"{a} + {b}", a + b
+        if operador == '-':
+            a, b = random.randint(5, 20), random.randint(1, 20)
+            if a <= b or a - b <= 3: tentativa += 1; continue
+            return f"{a} - {b}", a - b
+        if operador == '*':
+            a, b = random.randint(2, 10), random.randint(2, 10)
+            if a == b == 1: tentativa += 1; continue
+            return f"{a} * {b}", a * b
+        if operador == '/':
+            b = random.randint(2, 10)
+            r = random.randint(2, 10)
+            return f"{b*r} ÷ {b}", r
+    return None
+
+def gerarVariasOperacoes(qtd=50):
+    operadores = ['+', '-', '*', '/']
+    expressoes, contador = [], {op: 0 for op in operadores}
+    while len(expressoes) < qtd:
+        op = random.choice(operadores)
+        if contador[op] >= 15: continue
+        resultado = gerarOperacao(op)
+        if resultado:
+            expr, val = resultado
+            if val not in [v for _, v in expressoes]:
+                expressoes.append((expr, val))
+                contador[op] += 1
+    return expressoes
+
+# === FUNÇÕES DE DESENHO ===
+def desenhar_matriz(tela, fonte, matriz_valores, matriz_cores):
+    for i in range(linhas):
+        for j in range(colunas):
+            x = margem_x + j * (largura_bloco + espaco)
+            y = margem_y + i * (altura_bloco + espaco)
+            pygame.draw.rect(tela, matriz_cores[i][j], (x, y, largura_bloco, altura_bloco))
+            valor = matriz_valores[i][j]
+            texto = fonte.render(str(valor), True, cores["branco"])
+            tela.blit(texto, texto.get_rect(center=(x + largura_bloco // 2, y + altura_bloco // 2)))
+
+def desenhar_jogador(tela, linha, coluna):
+    px = margem_x + coluna * (largura_bloco + espaco) + largura_bloco // 2
+    py = margem_y + linha * (altura_bloco + espaco) + altura_bloco // 2
+    pygame.draw.circle(tela, (50, 50, 50), (px + 2, py + 2), 15)  # sombra
+    pygame.draw.circle(tela, cores["preto"], (px, py), 18)       # borda
+    pygame.draw.circle(tela, (0, 255, 255), (px, py), 15)         # bolinha
+
+def gerar_matriz_valores(expressoes):
+    valores = list(set(val for _, val in expressoes))
+    while len(valores) < linhas * colunas:
+        novo = random.randint(2, 100)
+        if novo not in valores: valores.append(novo)
+    random.shuffle(valores)
+    return [[valores[i * colunas + j] for j in range(colunas)] for i in range(linhas)]
+
+# === INICIALIZAÇÃO DO JOGO ===
+pygame.init()
+tela = pygame.display.set_mode((largura, altura))
+pygame.display.set_caption("JOGO BLOCOS - Expressões")
+fonte = pygame.font.Font(None, 36)
+fonte_grande = pygame.font.Font(None, 64)
+
+expressoes = gerarVariasOperacoes(30)
+perguntas = [e for e, _ in expressoes[:15]]
+respostas = [r for _, r in expressoes[:15]]
+matriz_valores = gerar_matriz_valores(expressoes)
+matriz_cores = [[random.choice(list(cores.values())[:6]) for _ in range(colunas)] for _ in range(linhas)]
+
+jogador_linha, jogador_coluna = 0, 0
+vidas, rodada, tempo_limite = 3, 0, 10
+tempo_inicial = pygame.time.get_ticks()
+mensagem, tempo_mensagem = "", 0
+
+# === LOOP PRINCIPAL ===
+rodar = True
+while rodar:
+    tela.fill(cores["preto"])
+    tempo_atual = pygame.time.get_ticks()
+    tempo_restante = max(0, tempo_limite - (tempo_atual - tempo_inicial) // 1000)
+
+    for evento in pygame.event.get():
+        if evento.type == pygame.QUIT:
+            rodar = False
+        if evento.type == pygame.KEYDOWN:
+            if evento.key == pygame.K_UP and jogador_linha > 0: jogador_linha -= 1
+            if evento.key == pygame.K_DOWN and jogador_linha < linhas - 1: jogador_linha += 1
+            if evento.key == pygame.K_LEFT and jogador_coluna > 0: jogador_coluna -= 1
+            if evento.key == pygame.K_RIGHT and jogador_coluna < colunas - 1: jogador_coluna += 1
+
+    if tempo_restante == 0 and rodada < len(perguntas) and vidas > 0:
+        valor = matriz_valores[jogador_linha][jogador_coluna]
+        if valor == respostas[rodada]: mensagem = "ACERTOU!"
+        else: mensagem = "ERROU!"; vidas -= 1
+        rodada += 1
+        tempo_inicial = pygame.time.get_ticks()
+        tempo_mensagem = tempo_atual
+        if rodada < len(perguntas): matriz_valores = gerar_matriz_valores(expressoes)
+
+    if mensagem and tempo_atual - tempo_mensagem > 1000:
+        mensagem = ""
+
+    desenhar_matriz(tela, fonte, matriz_valores, matriz_cores)
+    desenhar_jogador(tela, jogador_linha, jogador_coluna)
+
+    # Info: tempo, expressao, vidas
+    tela.blit(fonte.render(f"Tempo: {tempo_restante}", True, cores["branco"]), (largura//2 - 60, 20))
+    if rodada < len(perguntas):
+        tela.blit(fonte.render(perguntas[rodada], True, cores["branco"]), (largura//2 - 30, altura - 70))
+    tela.blit(fonte.render(f"Vidas: {vidas}", True, cores["branco"]), (20, altura - 40))
+    tela.blit(fonte.render(f"Rodada {rodada+1} de 15", True, cores["branco"]), (largura - 200, altura - 40))
+
+    if mensagem:
+        tela.blit(fonte_grande.render(mensagem, True, cores["branco"]), (largura//2 - 100, altura//2))
+
+    if rodada >= len(perguntas) or vidas <= 0:
+        pygame.time.delay(1000)
+        tela.fill(cores["preto"])
+        fim = "Parabéns! Você venceu!" if vidas > 0 else "Você perdeu!"
+        tela.blit(fonte_grande.render(fim, True, cores["verde"] if vidas > 0 else cores["vermelho"]), (largura//2 - 180, altura//2))
+        pygame.display.flip()
+        pygame.time.delay(3000)
+        break
+
+    pygame.display.flip()
+
+pygame.quit()
